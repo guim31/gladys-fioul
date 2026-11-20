@@ -1,177 +1,359 @@
 {
   "manifest_version": 1,
   "type": "device",
-  "name": "Demo Devices Template",
+  "name": "Prix du fioul",
   "description": {
-    "en": "Starter template showing sensors, a switch, a dimmable light and a smart plug.",
-    "fr": "Template de démarrage : capteurs, interrupteur, lampe variable et prise connectée."
+    "en": "Weekly average heating oil price in France (ministry data): change, cost of filling your tank.",
+    "fr": "Prix moyen hebdomadaire du fioul domestique en France (ministère) : tendance, coût du plein.",
+    "de": "Wöchentlicher Durchschnittspreis für Heizöl in Frankreich (Ministerium): Trend, Tankfüllung.",
+    "es": "Precio medio semanal del gasóleo de calefacción en Francia (ministerio): tendencia, llenado."
   },
   "version": "1.0.0",
-  "docker_image": "ghcr.io/gladysassistant/integration-template-js:1.0.0",
-  "gladys_version": ">=5.1.0",
-  "cover_image": "https://raw.githubusercontent.com/GladysAssistant/integration-template-js/master/cover.png",
-  "categories": ["lighting", "security", "environment"],
-  "transports": ["local", "cloud"],
+  "docker_image": "ghcr.io/guim31/gladys-fioul:1.0.0",
+  "gladys_version": ">=5.3.0",
+  "cover_image": "https://raw.githubusercontent.com/guim31/gladys-fioul/main/cover.png",
+  "categories": ["energy", "climate"],
+  "countries": ["FR"],
+  "transports": ["cloud"],
   "config_schema": [
     {
       "key": "intro",
       "type": "section",
-      "label": { "en": "Getting started", "fr": "Pour commencer" },
+      "label": {
+        "en": "Open data from the French ministry",
+        "fr": "Les données ouvertes du ministère",
+        "de": "Offene Daten des französischen Ministeriums",
+        "es": "Datos abiertos del ministerio francés"
+      },
       "description": {
-        "en": "The demo weather station reads real data from the free Open-Meteo API: pick the coordinates to observe. No account, no API key.",
-        "fr": "La station météo de démonstration lit de vraies données via l'API gratuite Open-Meteo : choisissez les coordonnées à observer. Pas de compte, pas de clé d'API."
+        "en": "National average prices, taxes included, published each week by the ministry of ecological transition (DGEC). Not your supplier's price. No account needed. Not affiliated with the ministry.",
+        "fr": "Prix moyens nationaux TTC publiés chaque semaine par le ministère de la Transition écologique (DGEC). Pas le prix de votre fournisseur. Aucun compte. Sans lien avec le ministère.",
+        "de": "Nationale Durchschnittspreise inkl. Steuern, jede Woche vom französischen Umweltministerium (DGEC) veröffentlicht. Nicht der Preis deines Lieferanten. Kein Konto nötig. Nicht mit dem Ministerium verbunden.",
+        "es": "Precios medios nacionales con impuestos, publicados cada semana por el ministerio francés de Transición Ecológica (DGEC). No es el precio de su proveedor. Sin cuenta. Sin relación con el ministerio."
       },
       "links": [
         {
-          "url": "https://open-meteo.com/en/docs",
-          "label": { "en": "Open-Meteo documentation", "fr": "Documentation Open-Meteo" }
+          "url": "https://www.ecologie.gouv.fr/politiques-publiques/prix-produits-petroliers",
+          "label": {
+            "en": "Petroleum product prices (ministry)",
+            "fr": "Prix des produits pétroliers (ministère)",
+            "de": "Preise der Mineralölprodukte (Ministerium)",
+            "es": "Precios de los productos petrolíferos (ministerio)"
+          }
         }
       ]
     },
     {
-      "key": "latitude",
+      "key": "tank_volume",
       "type": "number",
-      "label": { "en": "Latitude", "fr": "Latitude" },
-      "description": {
-        "en": "Latitude used for the demo weather sensor.",
-        "fr": "Latitude utilisée par le capteur météo de démonstration."
+      "label": {
+        "en": "Litres of a fill (optional)",
+        "fr": "Litres d’un plein (facultatif)",
+        "de": "Liter einer Füllung (optional)",
+        "es": "Litros de un llenado (opcional)"
       },
-      "placeholder": { "en": "e.g. 48.8566", "fr": "ex. 48.8566" },
-      "required": true,
-      "default": 48.8566,
-      "min": -90,
-      "max": 90
-    },
-    {
-      "key": "longitude",
-      "type": "number",
-      "label": { "en": "Longitude", "fr": "Longitude" },
       "description": {
-        "en": "Longitude used for the demo weather sensor.",
-        "fr": "Longitude utilisée par le capteur météo de démonstration."
+        "en": "The volume you usually order, for the estimated cost of a fill. 0: no cost.",
+        "fr": "Le volume que vous commandez d’habitude, pour le coût estimé du plein. 0 : pas de coût.",
+        "de": "Die Menge, die du gewöhnlich bestellst, für die geschätzten Kosten einer Füllung. 0: keine Kosten.",
+        "es": "El volumen que suele pedir, para el coste estimado del llenado. 0: sin coste."
       },
-      "placeholder": { "en": "e.g. 2.3522", "fr": "ex. 2.3522" },
-      "required": true,
-      "default": 2.3522,
-      "min": -180,
-      "max": 180
-    },
-    {
-      "key": "unit",
-      "type": "select",
-      "label": { "en": "Temperature unit", "fr": "Unité de température" },
       "required": false,
-      "default": "celsius",
+      "default": 0,
+      "min": 0,
+      "max": 100000
+    },
+    {
+      "key": "road_fuels",
+      "type": "multi_select",
+      "label": {
+        "en": "Road fuels too (optional)",
+        "fr": "Carburants routiers aussi (facultatif)",
+        "de": "Auch Kraftstoffe (optional)",
+        "es": "También carburantes (opcional)"
+      },
+      "description": {
+        "en": "National averages from the same file, on a second device. Station prices: see the fuel price integrations.",
+        "fr": "Moyennes nationales du même fichier, sur un second appareil. Prix des stations : voir les intégrations de prix des carburants.",
+        "de": "Landesdurchschnitte aus derselben Datei, auf einem zweiten Gerät. Tankstellenpreise: siehe die Kraftstoffpreis-Integrationen.",
+        "es": "Medias nacionales del mismo archivo, en un segundo dispositivo. Precios de gasolineras: vea las integraciones de precios de carburantes."
+      },
+      "required": false,
+      "default": [],
       "options": [
-        { "value": "celsius", "label": { "en": "Celsius", "fr": "Celsius" } },
-        { "value": "fahrenheit", "label": { "en": "Fahrenheit", "fr": "Fahrenheit" } }
+        {
+          "value": "diesel",
+          "label": { "en": "Diesel", "fr": "Gazole", "de": "Diesel", "es": "Diésel" }
+        },
+        {
+          "value": "sp95_e10",
+          "label": { "en": "SP95-E10", "fr": "SP95-E10", "de": "Super E10", "es": "SP95-E10" }
+        },
+        {
+          "value": "sp95",
+          "label": { "en": "SP95-E5", "fr": "SP95-E5", "de": "Super E5", "es": "SP95-E5" }
+        },
+        {
+          "value": "sp98",
+          "label": { "en": "SP98", "fr": "SP98", "de": "Super Plus 98", "es": "SP98" }
+        },
+        {
+          "value": "e85",
+          "label": { "en": "E85", "fr": "E85", "de": "E85", "es": "E85" }
+        },
+        {
+          "value": "lpg",
+          "label": { "en": "LPG", "fr": "GPLc", "de": "Autogas", "es": "GLP" }
+        },
+        {
+          "value": "off_road_diesel",
+          "label": {
+            "en": "Off-road diesel",
+            "fr": "Gazole non routier",
+            "de": "Agrardiesel",
+            "es": "Gasóleo B"
+          }
+        }
       ]
     },
     {
-      "key": "poll_frequency",
-      "type": "number",
-      "label": { "en": "Refresh interval (s)", "fr": "Intervalle de rafraîchissement (s)" },
+      "key": "language",
+      "type": "select",
+      "label": {
+        "en": "Language of the names",
+        "fr": "Langue des noms",
+        "de": "Sprache der Namen",
+        "es": "Idioma de los nombres"
+      },
       "description": {
-        "en": "How often sensors are polled, in seconds (one minute minimum).",
-        "fr": "Fréquence d'interrogation des capteurs, en secondes (une minute minimum)."
+        "en": "Names of the devices and features (frozen when a device is added), week date and trigger texts.",
+        "fr": "Noms des appareils et fonctionnalités (figés à l’ajout d’un appareil), date de la semaine et textes du déclencheur.",
+        "de": "Namen der Geräte und Funktionen (beim Hinzufügen festgelegt), Datum der Woche und Texte des Auslösers.",
+        "es": "Nombres de dispositivos y funciones (fijados al añadir un dispositivo), fecha de la semana y textos del disparador."
       },
       "required": false,
-      "default": 300,
-      "min": 60,
-      "max": 3600
+      "default": "fr",
+      "options": [
+        {
+          "value": "en",
+          "label": { "en": "English", "fr": "English", "de": "English", "es": "English" }
+        },
+        {
+          "value": "fr",
+          "label": { "en": "Français", "fr": "Français", "de": "Français", "es": "Français" }
+        },
+        {
+          "value": "de",
+          "label": { "en": "Deutsch", "fr": "Deutsch", "de": "Deutsch", "es": "Deutsch" }
+        },
+        {
+          "value": "es",
+          "label": { "en": "Español", "fr": "Español", "de": "Español", "es": "Español" }
+        }
+      ]
     }
   ],
   "actions": [
     {
-      "key": "test_weather",
-      "label": { "en": "Test the weather provider", "fr": "Tester le fournisseur météo" },
-      "timeout_seconds": 30
-    },
-    {
-      "key": "identify",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ]
+      "key": "test_connection",
+      "label": {
+        "en": "Test the download",
+        "fr": "Tester le téléchargement",
+        "de": "Download testen",
+        "es": "Probar la descarga"
+      },
+      "description": {
+        "en": "Downloads the ministry’s file now and shows the last heating oil price.",
+        "fr": "Télécharge tout de suite le fichier du ministère et affiche le dernier prix du fioul.",
+        "de": "Lädt die Datei des Ministeriums sofort und zeigt den letzten Heizölpreis.",
+        "es": "Descarga ahora el archivo del ministerio y muestra el último precio del gasóleo C."
+      },
+      "timeout_seconds": 90
     }
   ],
   "scene_triggers": [
     {
-      "key": "motion_detected",
-      "label": { "en": "Motion detected", "fr": "Mouvement détecté" },
+      "key": "new_price",
+      "label": {
+        "en": "New heating oil price",
+        "fr": "Nouveau prix du fioul",
+        "de": "Neuer Heizölpreis",
+        "es": "Nuevo precio del gasóleo C"
+      },
       "description": {
-        "en": "A demo motion sensor saw a person or an animal move.",
-        "fr": "Un détecteur de démonstration a vu bouger une personne ou un animal."
+        "en": "The ministry publishes the price of a new week, once a week. The summary gives the price, its change and the cost of a fill.",
+        "fr": "Le ministère publie le prix d’une nouvelle semaine, une fois par semaine. Le résumé donne le prix, sa variation et le coût du plein.",
+        "de": "Das Ministerium veröffentlicht den Preis einer neuen Woche, einmal pro Woche. Die Zusammenfassung nennt Preis, Änderung und Kosten einer Füllung.",
+        "es": "El ministerio publica el precio de una nueva semana, una vez por semana. El resumen indica el precio, su variación y el coste del llenado."
       },
       "fields": [
         {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Sensor", "fr": "Détecteur" }
-        },
-        {
-          "key": "target",
+          "key": "trend",
           "type": "multi_select",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" },
+          "label": {
+            "en": "Trend over the week",
+            "fr": "Tendance sur la semaine",
+            "de": "Trend der Woche",
+            "es": "Tendencia de la semana"
+          },
+          "description": {
+            "en": "Leave empty for any new price.",
+            "fr": "Laisser vide pour tout nouveau prix.",
+            "de": "Leer lassen für jeden neuen Preis.",
+            "es": "Deje vacío para cualquier nuevo precio."
+          },
           "options": [
-            { "value": "person", "label": { "en": "Person", "fr": "Personne" } },
-            { "value": "animal", "label": { "en": "Animal", "fr": "Animal" } }
+            {
+              "value": "down",
+              "label": { "en": "Down", "fr": "En baisse", "de": "Gesunken", "es": "A la baja" }
+            },
+            {
+              "value": "stable",
+              "label": { "en": "Stable", "fr": "Stable", "de": "Stabil", "es": "Estable" }
+            },
+            {
+              "value": "up",
+              "label": { "en": "Up", "fr": "En hausse", "de": "Gestiegen", "es": "Al alza" }
+            }
           ]
         }
       ],
       "variables": [
         {
-          "key": "target",
+          "key": "price",
+          "type": "number",
+          "label": {
+            "en": "Price incl. taxes (€/l)",
+            "fr": "Prix TTC (€/l)",
+            "de": "Preis inkl. Steuern (€/l)",
+            "es": "Precio con impuestos (€/l)"
+          }
+        },
+        {
+          "key": "change",
+          "type": "number",
+          "label": {
+            "en": "Change over one week (%)",
+            "fr": "Variation sur une semaine (%)",
+            "de": "Änderung in einer Woche (%)",
+            "es": "Variación en una semana (%)"
+          }
+        },
+        {
+          "key": "trend",
           "type": "string",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" }
-        }
-      ]
-    }
-  ],
-  "scene_actions": [
-    {
-      "key": "identify_device",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "description": {
-        "en": "Make a device signal itself (the demo light blinks).",
-        "fr": "Fait se signaler un appareil (la lampe de démonstration clignote)."
-      },
-      "timeout_seconds": 15,
-      "fields": [
+          "label": {
+            "en": "Trend (down, stable, up)",
+            "fr": "Tendance (down, stable, up)",
+            "de": "Trend (down, stable, up)",
+            "es": "Tendencia (down, stable, up)"
+          }
+        },
         {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ],
-      "outputs": [
+          "key": "fill_cost",
+          "type": "number",
+          "label": {
+            "en": "Estimated cost of a fill (€, 0 without volume)",
+            "fr": "Coût estimé du plein (€, 0 sans volume)",
+            "de": "Geschätzte Kosten einer Füllung (€, 0 ohne Menge)",
+            "es": "Coste estimado del llenado (€, 0 sin volumen)"
+          }
+        },
         {
-          "key": "signalled",
-          "type": "boolean",
-          "label": { "en": "Device signalled", "fr": "Appareil signalé" }
+          "key": "week_date",
+          "type": "string",
+          "label": {
+            "en": "Week (YYYY-MM-DD, a Friday)",
+            "fr": "Semaine (AAAA-MM-JJ, un vendredi)",
+            "de": "Woche (JJJJ-MM-TT, ein Freitag)",
+            "es": "Semana (AAAA-MM-DD, un viernes)"
+          }
+        },
+        {
+          "key": "summary",
+          "type": "string",
+          "label": {
+            "en": "Summary",
+            "fr": "Résumé",
+            "de": "Zusammenfassung",
+            "es": "Resumen"
+          }
         }
       ]
     }
   ],
   "widgets": [
     {
-      "key": "demo_status",
-      "label": { "en": "Demo status", "fr": "État de la démo" },
-      "description": {
-        "en": "Live temperature and plug power, plug connection and observed location.",
-        "fr": "Température et puissance en direct, connexion de la prise, position observée."
+      "key": "heating_oil",
+      "label": {
+        "en": "Heating oil price",
+        "fr": "Prix du fioul",
+        "de": "Heizölpreis",
+        "es": "Precio del gasóleo C"
       },
-      "icon": "activity",
-      "action_timeout_seconds": 15
+      "description": {
+        "en": "The national average price, its weekly change, the cost of a fill and the last six months.",
+        "fr": "Le prix moyen national, sa variation sur une semaine, le coût du plein et les six derniers mois.",
+        "de": "Der nationale Durchschnittspreis, seine Wochenänderung, die Füllkosten und die letzten 6 Monate.",
+        "es": "El precio medio nacional, su variación semanal, el coste del llenado y los últimos seis meses."
+      },
+      "icon": "droplet",
+      "settings": [
+        {
+          "key": "show_change",
+          "type": "boolean",
+          "label": {
+            "en": "Show the weekly change",
+            "fr": "Afficher la variation sur une semaine",
+            "de": "Wochenänderung anzeigen",
+            "es": "Mostrar la variación semanal"
+          },
+          "required": false,
+          "default": true
+        },
+        {
+          "key": "show_fill_cost",
+          "type": "boolean",
+          "label": {
+            "en": "Show the cost of a fill",
+            "fr": "Afficher le coût du plein",
+            "de": "Kosten einer Füllung anzeigen",
+            "es": "Mostrar el coste del llenado"
+          },
+          "description": {
+            "en": "With the litres of a fill set in the configuration.",
+            "fr": "Avec les litres d’un plein réglés dans la configuration.",
+            "de": "Mit den Litern einer Füllung aus der Konfiguration.",
+            "es": "Con los litros de un llenado fijados en la configuración."
+          },
+          "required": false,
+          "default": true
+        },
+        {
+          "key": "show_chart",
+          "type": "boolean",
+          "label": {
+            "en": "Show the curve of the last weeks",
+            "fr": "Afficher la courbe des dernières semaines",
+            "de": "Kurve der letzten Wochen anzeigen",
+            "es": "Mostrar la curva de las últimas semanas"
+          },
+          "required": false,
+          "default": true
+        },
+        {
+          "key": "show_month",
+          "type": "boolean",
+          "label": {
+            "en": "Show the previous month’s average",
+            "fr": "Afficher la moyenne du mois précédent",
+            "de": "Mittelwert des Vormonats anzeigen",
+            "es": "Mostrar la media del mes anterior"
+          },
+          "required": false,
+          "default": true
+        }
+      ]
     }
   ]
 }

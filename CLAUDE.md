@@ -32,15 +32,18 @@ pushing.
 
 ```
 index.js                          SDK wiring only: handlers registered before connect()
-src/devices/index.js              registry of the device blueprints + dispatch helpers
-src/devices/<type>.js             one device type per file (buildDevice, onPoll, onSetValue...)
-src/scenes.js                     scene action handlers (manifest `scene_actions`)
-src/widgets.js                    dashboard widget handlers (manifest `widgets`)
+src/app.js                        the integration: timer, read cadence, states, trigger, action, widget
+src/source.js                     the ministry's page and workbook: link, download (ETag), weeks, summary
+src/xlsx.js                       minimal .xlsx reader (zip + inflateRaw + regular expressions)
+src/fuels.js                      the products of the workbook: header matchers, names, keys
+src/devices.js                    the two devices and their states
+src/widgets.js                    the dashboard widget
+src/i18n.js                       every text in en, fr, de, es
 src/config.js                     DEFAULT_CONFIG (mirrors the manifest defaults) + normalization
-src/weather.js                    example driver (Open-Meteo)
+src/store.js, src/issues.js       /data persistence; failures logged once
 gladys-assistant-integration.json manifest: name, config_schema, actions, image...
-docs/en.md, docs/fr.md            user documentation, re-hosted by Gladys (mandatory)
-test/                             node --test, against the SDK's fake Gladys (integration-sdk/testing)
+docs/{en,fr,de,es}.md             user documentation, re-hosted by Gladys (mandatory)
+test/                             node --test, against the SDK's fake Gladys and a fake ministry site
 .github/scripts/release.mjs       release helpers (manifest bump, changelog), tested in test/
 ```
 
@@ -259,3 +262,23 @@ long, et sur un « Sie »/« Ihr… » de politesse en allemand. Le store exige 
 - Docs `en`, `fr`, `de`, `es` avec les mêmes sections.
 - Chauffe, ouverture, sécurité : ne rien rendre pilotable « comme un thermostat » ou par un assistant
   vocal quand une erreur serait dangereuse (leçon d'OctoPrint).
+
+## Prix du fioul (DGEC)
+
+- Source : la page `https://www.ecologie.gouv.fr/politiques-publiques/prix-produits-petroliers` lie le classeur
+  « Prix HTT et TTC depuis janvier 2020 » ; son nom change (`…_0.xlsx`) : le lien est retrouvé dans la page à chaque
+  relève (`.xlsx` sur un site `gouv.fr`, « Prix HTT et TTC » dans l'adresse ou le texte), repli sur le dernier lien
+  qui a marché (`/data`), puis sur celui du 20/11/2026. Le site répond aussi à un `User-Agent` non navigateur.
+- Classeur : trois feuilles (carburants routiers, non routiers, combustibles), ligne 1 = blocs `H.T.T.` / `T.T.C.`
+  / `H.T.V.A.` sur des cellules fusionnées (le titre n'est que dans la première colonne du bloc), ligne 2 = produits,
+  puis une ligne par semaine (**date Excel du vendredi**), lignes vides, `MOYENNES MENSUELLES` (formules
+  `AVERAGE` des semaines, datées du 1er), `MOYENNES ANNUELLES`. On ne lit que les semaines du bloc `T.T.C.` ; la
+  moyenne du mois précédent est recalculée et égale celle du ministère (test). « Gazole non routier » contient
+  « Gazole » : tester le premier avant le second. Le fioul > 27 000 l et le fioul lourd (€/t) sont ignorés.
+- Publication en général le lundi après-midi (Last-Modified lundi 14:26 le 16/11/2026) : relève quotidienne, toutes
+  les 2 h du lundi 10:00 UTC jusqu'à la nouvelle semaine ; ETag pour un 304.
+- Pas de lecteur xlsx en dépendance : `src/xlsx.js` (sans Zip64 ni chiffrement), bornes contre les bombes zip. Les
+  tests fabriquent des classeurs avec `test/helpers/xlsx-writer.js` (`zlib.crc32`, Node ≥ 22.2).
+- Prettier reformate le HTML : `test/fixtures/*.html` est dans `.prettierignore` (la fixture de la page est un
+  extrait brut).
+- Pourcentage : `currency/decimal` + unité `percent` (comme gladys-bourse), bornes ±50.
