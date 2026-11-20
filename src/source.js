@@ -67,18 +67,46 @@ async function download(fetchImpl, url, { maxBytes, headers = {} }) {
   if (!response.ok) {
     throw new SourceError(`${hostOf(url)} answered HTTP ${response.status}`);
   }
+  // A redirect may only stay on a gouv.fr site (response.url is empty in a mock).
+  if (response.url && !isGouvFr(response.url)) {
+    throw new SourceError(`${hostOf(url)} redirected to ${hostOf(response.url)}`, 'badFile');
+  }
+  const tooLarge = (size) =>
+    new SourceError(`${hostOf(url)} sent ${size} bytes, more than expected`, 'badFile');
   const declared = Number(response.headers.get('content-length'));
   if (declared > maxBytes) {
-    throw new SourceError(`${hostOf(url)} sent ${declared} bytes, more than expected`, 'badFile');
+    throw tooLarge(declared);
   }
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.length > maxBytes) {
-    throw new SourceError(
-      `${hostOf(url)} sent ${bytes.length} bytes, more than expected`,
-      'badFile',
-    );
+  // Read as a stream, stopped at the limit: a body without content-length
+  // never fills the 256 MB sandbox.
+  const chunks = [];
+  let size = 0;
+  try {
+    for await (const chunk of response.body ?? []) {
+      size += chunk.length;
+      if (size > maxBytes) {
+        throw tooLarge(`more than ${maxBytes}`);
+      }
+      chunks.push(chunk);
+    }
+  } catch (err) {
+    await response.body?.cancel().catch(() => {});
+    if (err instanceof SourceError) {
+      throw err;
+    }
+    throw new SourceError(`${hostOf(url)} unreachable: ${err.message}`);
   }
-  return { status: response.status, headers: response.headers, bytes };
+  return { status: response.status, headers: response.headers, bytes: Buffer.concat(chunks) };
+}
+
+/** An https address on a gouv.fr site. */
+export function isGouvFr(address) {
+  try {
+    const url = new URL(address);
+    return url.protocol === 'https:' && /(^|\.)gouv\.fr$/.test(url.hostname);
+  } catch {
+    return false;
+  }
 }
 
 const hostOf = (url) => {
@@ -108,7 +136,7 @@ export function findWorkbookUrl(html) {
     } catch {
       continue;
     }
-    if (url.protocol !== 'https:' || !/(^|\.)gouv\.fr$/.test(url.hostname)) {
+    if (!isGouvFr(url.href)) {
       continue;
     }
     if (!/\.xlsx$/i.test(url.pathname)) {
@@ -268,9 +296,25 @@ export async function fetchPrices(fetchImpl, { knownUrl = null, previous = null 
   const linkFound = url !== null;
   url ??= knownUrl ?? DEFAULT_WORKBOOK_URL;
 
-  const headers =
-    previous?.etag && previous.url === url ? { 'if-none-match': previous.etag } : undefined;
-  const file = await download(fetchImpl, url, { maxBytes: MAX_WORKBOOK_BYTES, headers });
+  const get = (address) =>
+    download(fetchImpl, address, {
+      maxBytes: MAX_WORKBOOK_BYTES,
+      headers:
+        previous?.etag && previous.url === address ? { 'if-none-match': previous.etag } : undefined,
+    });
+  let file;
+  try {
+    file = await get(url);
+  } catch (err) {
+    // A new link the page shows before its file is served: the last one that
+    // worked may still answer.
+    const fallback = knownUrl ?? DEFAULT_WORKBOOK_URL;
+    if (!linkFound || fallback === url || err.kind !== 'unreachable') {
+      throw err;
+    }
+    url = fallback;
+    file = await get(url);
+  }
   if (file.status === 304) {
     return {
       url,

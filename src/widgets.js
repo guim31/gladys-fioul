@@ -117,9 +117,8 @@ export function buildWidgetContent({ weeks, settings, tankVolume, status, langua
         {
           label: pick(MESSAGES.monthAverage(oil.month), language),
           value: formatPrice(oil.monthAverage, language),
-          ...withColor(
-            oil.price < oil.monthAverage ? WIDGET_COLORS.SUCCESS : WIDGET_COLORS.WARNING,
-          ),
+          // Below the average green, above orange, equal neutral.
+          ...withColor(trendColor(((oil.price - oil.monthAverage) / oil.monthAverage) * 100)),
         },
       ],
     });

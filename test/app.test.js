@@ -227,6 +227,10 @@ test('failures: the status says it in four languages, and recovers', async (t) =
   world.site.fail = networkError;
   world.clock.advance(REFRESH_MS);
   await world.app.tick();
+  // One failed read with fresh prices held: a blip, not said yet.
+  assert.deepEqual(world.fake.connectionStatus, { connected: true });
+  world.clock.advance(FAILURE_RETRY_MS);
+  await world.app.tick();
   assert.deepEqual(world.fake.connectionStatus, { connected: false, message: TEXT.unreachable });
   // The states already read stay published: nothing is erased.
   world.site.fail = null;

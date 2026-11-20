@@ -43,6 +43,8 @@ export const REFRESH_MS = DAY_MS;
 export const RELEASE_RETRY_MS = 2 * HOUR_MS;
 export const FAILURE_RETRY_MS = HOUR_MS;
 export const HEARTBEAT_MS = 12 * HOUR_MS;
+/** The core waits 15 s for a widget content. */
+export const WIDGET_WAIT_MS = 10 * 1000;
 /** The next week is expected from the Monday 10:00 UTC after the next Friday. */
 const RELEASE_OFFSET_MS = 10 * DAY_MS + 10 * HOUR_MS;
 const RELEASE_WINDOW_MS = 4 * DAY_MS;
@@ -158,7 +160,11 @@ export function registerHandlers(
       pendingEvents.push(...announce());
     } catch (err) {
       const error = err instanceof SourceError ? err : new SourceError(err.message);
-      failure = { kind: error.kind, retryAt: attemptAt + FAILURE_RETRY_MS };
+      failure = {
+        kind: error.kind,
+        retryAt: attemptAt + FAILURE_RETRY_MS,
+        count: (failure?.count ?? 0) + 1,
+      };
       readIssues.fail('read', `The ministry’s workbook cannot be read: ${error.message}`);
     }
   }
@@ -242,9 +248,11 @@ export function registerHandlers(
   /** The application status of the Configuration screen, sent on change only. */
   async function reportStatus() {
     let status = { connected: true };
-    if (failure) {
+    const fresh = freshSummary(weeks(), HEATING_OIL, now());
+    // One failed read while fresh prices are held is a blip: said from the second.
+    if (failure && (!fresh || failure.count >= 2 || failure.kind === 'badFile')) {
       status = { connected: false, message: failureText() };
-    } else if (weeks() && !freshSummary(weeks(), HEATING_OIL, now())) {
+    } else if (weeks() && !fresh) {
       status = { connected: false, message: TEXT.stale };
     }
     const key = JSON.stringify(status);
@@ -368,7 +376,16 @@ export function registerHandlers(
 
   gladys.onWidgetGet(WIDGET_KEY, async ({ settings, language }) => {
     if (!workbook && now() >= (failure?.retryAt ?? 0)) {
-      await tick({ force: true });
+      // Not longer than the core waits for a widget: the tick goes on, and
+      // asks for a refresh once the prices are read.
+      let timeout;
+      await Promise.race([
+        tick({ force: true }),
+        new Promise((resolve) => {
+          timeout = setTimeout(resolve, WIDGET_WAIT_MS);
+        }),
+      ]);
+      clearTimeout(timeout);
     }
     return buildWidgetContent({
       weeks: weeks(),

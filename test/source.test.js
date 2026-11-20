@@ -229,3 +229,51 @@ test('a file far too large is refused without being read', async () => {
       : new Response('x', { headers: { 'content-length': String(50 * 1024 * 1024) } });
   await assert.rejects(fetchPrices(site.fetch), (err) => err.kind === 'badFile');
 });
+
+test('a new link whose file is not served yet: the last link that worked', async () => {
+  const site = createFakeSite();
+  site.page = site.page.replaceAll('2020_0.xlsx', '2020_1.xlsx');
+  const result = await fetchPrices(site.fetch, { knownUrl: WORKBOOK_URL });
+  assert.equal(result.url, WORKBOOK_URL);
+  assert.equal(result.weeks.length, WEEKS.length);
+});
+
+test('a body without content-length is cut at the limit; a redirect off gouv.fr is refused', async () => {
+  const site = createFakeSite();
+  site.fail = (url) => {
+    if (url === PAGE_URL) {
+      return new Response(PAGE);
+    }
+    const chunk = new Uint8Array(1024 * 1024);
+    let sent = 0;
+    const body = new ReadableStream({
+      pull(controller) {
+        sent += 1;
+        controller.enqueue(chunk);
+        if (sent > 100) {
+          controller.close();
+        }
+      },
+    });
+    return new Response(body);
+  };
+  await assert.rejects(fetchPrices(site.fetch), /more than 5242880/);
+  site.fail = (url) => {
+    const response = new Response(url === PAGE_URL ? PAGE : WORKBOOK);
+    Object.defineProperty(response, 'url', { value: 'https://evil.example.com/x.xlsx' });
+    return response;
+  };
+  await assert.rejects(fetchPrices(site.fetch), /redirected to evil\.example\.com/);
+});
+
+test('an empty shared string (<si/>) keeps the indexes of the next ones', () => {
+  const book = zip({
+    'xl/workbook.xml': '<workbook><sheets><sheet name="S" r:id="rId1"/></sheets></workbook>',
+    'xl/_rels/workbook.xml.rels':
+      '<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>',
+    'xl/sharedStrings.xml': '<sst><si/><si><t>Date</t></si></sst>',
+    'xl/worksheets/sheet1.xml':
+      '<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>1</v></c></row></sheetData></worksheet>',
+  });
+  assert.equal(readWorkbook(book)[0].rows.get(1).get(0), 'Date');
+});

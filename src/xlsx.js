@@ -179,9 +179,10 @@ export function readWorkbook(bytes) {
       targets.set(Id, Target.startsWith('/') ? Target.slice(1) : `xl/${Target}`);
     }
   }
-  const strings = [...(part('xl/sharedStrings.xml') ?? '').matchAll(/<si>([\s\S]*?)<\/si>/g)].map(
-    (m) => textOf(m[1]),
-  );
+  // `<si/>` is an empty string: skipping it would shift every later index.
+  const strings = [
+    ...(part('xl/sharedStrings.xml') ?? '').matchAll(/<si(?:\s[^>]*)?(?:\/>|>([\s\S]*?)<\/si>)/g),
+  ].map((m) => textOf(m[1] ?? ''));
   const sheets = [];
   for (const [tag] of workbook.matchAll(/<sheet\s[^>]*>/g)) {
     const attrs = attributes(tag);
