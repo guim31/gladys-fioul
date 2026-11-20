@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-20
+
 ### Added
 
 - The weekly national average price of heating oil in France (deliveries of
@@ -27,4 +29,5 @@ the notes of the version's GitHub Release.
 - "Test the download" action.
 - Documentation in English, French, German and Spanish.
 
-[Unreleased]: https://github.com/guim31/gladys-fioul/commits/main
+[Unreleased]: https://github.com/guim31/gladys-fioul/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/guim31/gladys-fioul/releases/tag/v1.0.0
