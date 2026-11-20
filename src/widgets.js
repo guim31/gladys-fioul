@@ -1,169 +1,133 @@
 // -----------------------------------------------------------------------------
-// Dashboard widgets (SDK v0.14+, Gladys 5.1+).
+// The "Heating oil price" dashboard widget: the national average price, its
+// weekly change (green down, orange up), the estimated cost of a fill (with a
+// tank volume), the curve of the last weeks, the average of the previous
+// month and the week of the survey. Every block but the price has a setting
+// to hide it. It needs no device.
 //
-// A widget puts the integration's own data on the Gladys dashboard without a
-// dedicated core widget. The manifest `widgets` field declares its identity
-// (key, label, icon, optional per-instance `settings`); at runtime the
-// integration returns a DECLARATIVE content — `text`, `value`, `gauge`,
-// `status`, `chart`, `card-list`, `image`, `button` — that the core renders
-// with its own theme, dark mode and translations. No HTML, no CSS.
-//
-// Each entry of WIDGETS is keyed by the widget `key` and exposes:
-//   - get(gladys, { settings, language, units, config }): the content,
-//     registered by index.js with `gladys.onWidgetGet(key, ...)`;
-//   - action(gladys, { actionKey, params, settings, config }) (optional): a
-//     tapped `button` carrying an `action`, registered with
-//     `gladys.onWidgetAction`.
-//
-// Check your contents in the tests with `validateWidgetContent` (exported by
-// the SDK, see test/widgets.test.js), or run with DEBUG=gladys-integration-sdk
-// to have the SDK log every violation of the vocabulary and the budget.
+// Budget (core): 8 components, 2 texts — at most 3 tiles, 1 chart, 1 status
+// and 1 caption here.
 // -----------------------------------------------------------------------------
 
-import {
-  createLogger,
-  DEVICE_FEATURE_CATEGORIES,
-  DEVICE_TRANSPORTS,
-  WIDGET_COLORS,
-} from '@gladysassistant/integration-sdk';
-import { identifyDevice } from './devices/index.js';
-import { weatherStation } from './devices/weatherStation.js';
-import { plug } from './devices/plug.js';
-import { light } from './devices/light.js';
+import { WIDGET_COLORS } from '@gladysassistant/integration-sdk';
+import { fillCost, freshSummary } from './devices.js';
+import { HEATING_OIL, PRODUCTS } from './fuels.js';
+import { MESSAGES, TEXT, formatPrice, pick } from './i18n.js';
 
-const logger = createLogger({ name: 'widgets' });
+export const WIDGET_KEY = 'heating_oil';
 
-// Widget key, as declared in the manifest `widgets` field.
-export const DEMO_STATUS_WIDGET = 'demo_status';
+/** The content is cached by the core: the data is weekly, an hour is plenty. */
+export const WIDGET_TTL_SECONDS = 3600;
 
-// Keys of the `button` actions the demo_status content declares.
-const DEMO_STATUS_ACTIONS = { IDENTIFY_LIGHT: 'identify_light' };
+/** Weeks on the curve: half a year. */
+export const CHART_WEEKS = 26;
 
-// How the plug transport reads in the status list.
-const TRANSPORT_STATUS = {
-  [DEVICE_TRANSPORTS.LOCAL]: { value: { en: 'Local', fr: 'Locale' }, color: WIDGET_COLORS.SUCCESS },
-  [DEVICE_TRANSPORTS.CLOUD]: { value: { en: 'Cloud', fr: 'Cloud' }, color: WIDGET_COLORS.INFO },
-  [DEVICE_TRANSPORTS.UNREACHABLE]: {
-    value: { en: 'Unreachable', fr: 'Injoignable' },
-    color: WIDGET_COLORS.DANGER,
-  },
-};
+/** Under this change (in %), the price is stable: no color. */
+export const STABLE_PERCENT = 0.05;
 
-// A live tile references a feature by its external_id: read it from the
-// discovery payload itself, so the widget and the device never disagree.
-function featureExternalId(gladys, config, blueprint, category) {
-  const device = blueprint.buildDevice(gladys, config);
-  return device.features.find((feature) => feature.category === category).external_id;
-}
-
-function plugConnectionStatus(gladys, config) {
-  const { transport, degraded } = plug.transport(gladys, config);
-  const { value, color } = TRANSPORT_STATUS[transport];
-  if (degraded) {
-    return {
-      value: { en: `${value.en} (degraded mode)`, fr: `${value.fr} (mode dégradé)` },
-      color: WIDGET_COLORS.WARNING,
-    };
+/** Green when the price fell over the week, orange when it rose. */
+export function trendColor(change) {
+  if (change === undefined || Math.abs(change) < STABLE_PERCENT) {
+    return undefined;
   }
-  return { value, color };
+  return change < 0 ? WIDGET_COLORS.SUCCESS : WIDGET_COLORS.WARNING;
 }
 
-export const WIDGETS = {
-  [DEMO_STATUS_WIDGET]: {
-    // `settings` holds the per-instance values of the declared `settings`
-    // (none here); `language` and `units` are those of the user viewing the
-    // dashboard, for the values you format yourself. Multi-language objects
-    // (`{ en, fr }`) are picked by the core, like everywhere else.
-    async get(gladys, { config }) {
-      logger.debug(`onWidgetGet <- ${DEMO_STATUS_WIDGET}`);
-      return {
-        // Reload policy: the computed parts below only change with the
-        // config, and index.js nudges the widget on every (re)connection and
-        // config update (see refreshWidgets) — the TTL is just a safety net.
-        ttl_seconds: 300,
-        components: [
-          // Device-bound tiles: LIVE, they follow the published states over
-          // the core's real-time path. No TTL, no nudge involved.
-          {
-            type: 'value',
-            label: { en: 'Temperature', fr: 'Température' },
-            icon: 'thermometer',
-            device_feature: featureExternalId(
-              gladys,
-              config,
-              weatherStation,
-              DEVICE_FEATURE_CATEGORIES.TEMPERATURE_SENSOR,
-            ),
-          },
-          {
-            type: 'value',
-            label: { en: 'Office plug', fr: 'Prise du bureau' },
-            icon: 'zap',
-            device_feature: featureExternalId(
-              gladys,
-              config,
-              plug,
-              DEVICE_FEATURE_CATEGORIES.ENERGY_SENSOR,
-            ),
-          },
-          // Computed rows: what the integration knows that no device feature
-          // carries. Served from the core cache until the TTL or a nudge.
-          {
-            type: 'status',
-            items: [
-              {
-                label: { en: 'Plug connection', fr: 'Connexion de la prise' },
-                icon: 'wifi',
-                ...plugConnectionStatus(gladys, config),
-              },
-              {
-                label: { en: 'Observed location', fr: 'Position observée' },
-                icon: 'map-pin',
-                value: `${config.latitude.toFixed(2)}, ${config.longitude.toFixed(2)}`,
-                color: WIDGET_COLORS.NEUTRAL,
-              },
-            ],
-          },
-          // `params` are declared HERE and sent back as-is: the handler never
-          // receives user input (a dashboard can hang on a public wall).
-          {
-            type: 'button',
-            label: { en: 'Identify the light', fr: 'Identifier la lampe' },
-            icon: 'eye',
-            style: 'secondary',
-            action: {
-              key: DEMO_STATUS_ACTIONS.IDENTIFY_LIGHT,
-              params: { device: light.deviceExternalId(gladys) },
-            },
-          },
-        ],
-      };
-    },
+/** The widget settings, normalized: every block shown unless switched off. */
+export function normalizeSettings(settings = {}) {
+  return {
+    showChange: settings.show_change !== false,
+    showFillCost: settings.show_fill_cost !== false,
+    showChart: settings.show_chart !== false,
+    showMonth: settings.show_month !== false,
+  };
+}
 
-    // Resolve an optional toast (string or multi-language object, ≤ 200
-    // characters). After a successful action the core drops the cached
-    // content and every open dashboard refetches it: no nudge needed.
-    async action(gladys, { actionKey, params, config }) {
-      logger.info(`onWidgetAction <- ${DEMO_STATUS_WIDGET}.${actionKey}`);
-      if (actionKey === DEMO_STATUS_ACTIONS.IDENTIFY_LIGHT) {
-        return identifyDevice(gladys, params.device, config);
-      }
-      // Throwing acks the action as failed: the message reaches the user.
-      throw new Error(`Unknown widget action: ${actionKey}`);
-    },
-  },
-};
+const withColor = (color) => (color ? { color } : {});
 
 /**
- * Freshness nudge: ask the core to re-pull every widget NOW instead of
- * waiting for the content TTL. Call it when you KNOW a computed content
- * changed (here: the config, which drives the plug transport and the observed
- * location) — and after every (re)connection, since the nudges are
- * fire-and-forget: rate-limited core-side to 1 per 10 s per widget, dropped
- * silently while disconnected.
+ * Build the widget content.
+ * @param {object} options
+ * @param {object[] | null} options.weeks the parsed workbook
+ * @param {ReturnType<typeof normalizeSettings>} options.settings
+ * @param {number} options.tankVolume litres, 0 for none
+ * @param {'ok' | 'unreachable' | 'badFile'} options.status
+ * @param {string} options.language
+ * @param {number} options.now
  */
-export function refreshWidgets(gladys) {
-  for (const key of Object.keys(WIDGETS)) {
-    gladys.requestWidgetRefresh(key);
+export function buildWidgetContent({ weeks, settings, tankVolume, status, language, now }) {
+  const oil = freshSummary(weeks, HEATING_OIL, now);
+  if (!oil) {
+    const message =
+      status === 'ok' ? (weeks ? TEXT.stale : TEXT.waiting) : (TEXT[status] ?? TEXT.unreachable);
+    return {
+      ttl_seconds: WIDGET_TTL_SECONDS,
+      components: [{ type: 'text', variant: 'body', text: pick(message, language) }],
+    };
   }
+  const color = trendColor(oil.change);
+  const components = [
+    {
+      type: 'value',
+      label: pick(PRODUCTS.heating_oil.name, language),
+      value: oil.price,
+      unit: '€/l',
+      icon: 'droplet',
+      ...withColor(color),
+    },
+  ];
+  if (settings.showChange && oil.change !== undefined) {
+    components.push({
+      type: 'value',
+      label: pick(TEXT.week, language),
+      value: oil.change,
+      unit: '%',
+      icon: oil.change < 0 ? 'trending-down' : 'trending-up',
+      ...withColor(color),
+    });
+  }
+  if (settings.showFillCost && tankVolume > 0) {
+    components.push({
+      type: 'value',
+      label: pick(MESSAGES.fill(tankVolume), language),
+      value: fillCost(oil.price, tankVolume),
+      unit: '€',
+      icon: 'truck',
+    });
+  }
+  if (settings.showChart) {
+    const points = weeks
+      .filter((week) => week.prices.heating_oil !== undefined)
+      .slice(-CHART_WEEKS)
+      .map((week) => ({ t: `${week.date}T00:00:00.000Z`, v: week.prices.heating_oil }));
+    if (points.length >= 2) {
+      components.push({
+        type: 'chart',
+        chart_type: 'line',
+        title: pick(TEXT.trend, language),
+        unit: '€/l',
+        series: [{ name: pick(PRODUCTS.heating_oil.name, language), points }],
+      });
+    }
+  }
+  if (settings.showMonth && oil.monthAverage !== undefined) {
+    components.push({
+      type: 'status',
+      items: [
+        {
+          label: pick(MESSAGES.monthAverage(oil.month), language),
+          value: formatPrice(oil.monthAverage, language),
+          ...withColor(
+            oil.price < oil.monthAverage ? WIDGET_COLORS.SUCCESS : WIDGET_COLORS.WARNING,
+          ),
+        },
+      ],
+    });
+  }
+  components.push({
+    type: 'text',
+    variant: 'caption',
+    text: `DGEC · ${pick(MESSAGES.week(oil.date), language)}`,
+  });
+  return { ttl_seconds: WIDGET_TTL_SECONDS, components };
 }

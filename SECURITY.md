@@ -30,6 +30,13 @@ Gladys before reporting a problem.
 
 In scope: the code of this repository and the Docker image it publishes.
 
+The integration needs no account and stores no secret. Under `/data` it keeps
+one small file: the last week announced by the scene trigger and the last
+address of the ministry's workbook that worked. It only connects to Gladys and
+to `www.ecologie.gouv.fr` over HTTPS (the workbook link is followed only on a
+`gouv.fr` site), and reads the downloaded workbook with size limits (5 MB
+downloaded, 16 MB per inflated part).
+
 Out of scope: Gladys Assistant itself (see its
 [security policy](https://github.com/GladysAssistant/Gladys/security/policy)),
-and the third-party services and devices the integration talks to.
+and the ministry's website and data.
